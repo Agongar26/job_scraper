@@ -4,6 +4,8 @@ from bs4 import BeautifulSoup
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from datetime import datetime, timedelta
+import re
 
 # --------------------------------------------------------
 # CONFIGURACIÓN
@@ -13,13 +15,28 @@ APP_PASSWORD = os.environ["EMAIL_PASSWORD"]
 SERPAPI_KEY = os.environ["SERPAPI_KEY"]
 RECEIVER = "alejandrogonzalezgarcia540@gmail.com"
 
-# Palabras clave basadas en tus habilidades
 KEYWORDS = [
     "junior", "prácticas", "intern", "desarrollador", "developer",
     "java", "kotlin", "sql", "c#", "mongodb", "mvc",
     "ciberseguridad", "security", "redes", "hardening", "logs",
     "windows", "linux"
 ]
+
+DAYS_LIMIT = 7  # Filtrar solo ofertas de la última semana
+
+# --------------------------------------------------------
+# HELPER: comprobar si fecha está en la última semana
+# --------------------------------------------------------
+def is_recent(posted_date_str):
+    """Devuelve True si la oferta se publicó en los últimos DAYS_LIMIT días."""
+    if not posted_date_str:
+        return False
+    try:
+        # SerpAPI devuelve fechas tipo '2025-11-15'
+        post_date = datetime.strptime(posted_date_str[:10], "%Y-%m-%d")
+        return datetime.now() - post_date <= timedelta(days=DAYS_LIMIT)
+    except Exception:
+        return False
 
 # --------------------------------------------------------
 # SERPAPI – GOOGLE JOBS
@@ -45,6 +62,9 @@ def search_google_jobs():
     offers = []
     for job in jobs:
         title = job.get("title", "").strip()
+        date_posted = job.get("date_posted", "")
+        if not is_recent(date_posted):
+            continue
         if any(k in title.lower() for k in KEYWORDS):
             offers.append({
                 "source": "Google Jobs",
@@ -78,6 +98,9 @@ def search_linkedin_jobs():
     offers = []
     for job in jobs:
         title = job.get("title", "").strip()
+        date_posted = job.get("date_posted", "")
+        if not is_recent(date_posted):
+            continue
         if any(k in title.lower() for k in KEYWORDS):
             offers.append({
                 "source": "LinkedIn",
@@ -104,12 +127,23 @@ def scrape_indeed():
         company_elem = job.select_one(".companyName")
         location_elem = job.select_one(".companyLocation")
         salary_elem = job.select_one(".salary-snippet")
+        date_elem = job.select_one(".date")  # Ej: "Hace 2 días"
 
         if not title_elem:
             continue
 
         title = title_elem.text.strip()
-        if any(k in title.lower() for k in KEYWORDS):
+        # Parsear fecha en Indeed
+        recent = False
+        if date_elem:
+            m = re.search(r"(\d+)", date_elem.text)
+            if m:
+                days_ago = int(m.group(1))
+                recent = days_ago <= DAYS_LIMIT
+            elif "hoy" in date_elem.text.lower():
+                recent = True
+
+        if recent and any(k in title.lower() for k in KEYWORDS):
             offers.append({
                 "source": "Indeed",
                 "title": title,
@@ -135,8 +169,19 @@ def scrape_tecnoempleo():
         company = job.select_one(".empresa_oferta").text.strip()
         link = "https://www.tecnoempleo.com" + job.select_one("a")["href"]
         salary_elem = job.select_one(".salario")
+        date_elem = job.select_one(".fecha")  # Fecha publicada
 
-        if any(k in title.lower() for k in KEYWORDS):
+        # Parsear fecha
+        recent = False
+        if date_elem:
+            m = re.search(r"(\d+)", date_elem.text)
+            if m:
+                days_ago = int(m.group(1))
+                recent = days_ago <= DAYS_LIMIT
+            elif "hoy" in date_elem.text.lower():
+                recent = True
+
+        if recent and any(k in title.lower() for k in KEYWORDS):
             offers.append({
                 "source": "TecnoEmpleo",
                 "title": title,
@@ -152,10 +197,10 @@ def scrape_tecnoempleo():
 # --------------------------------------------------------
 def build_html_table(items):
     if not items:
-        return "<p>No se encontraron ofertas para tu perfil esta semana.</p>"
+        return "<p>No se encontraron ofertas recientes para tu perfil esta semana.</p>"
 
     html = """
-    <h2>Ofertas de empleo para perfil junior</h2>
+    <h2>Ofertas de empleo recientes para perfil junior</h2>
     <table border='1' cellpadding='6' cellspacing='0' style='border-collapse: collapse;'>
         <tr style='background:#eee;'>
             <th>Fuente</th>
@@ -187,7 +232,7 @@ def build_html_table(items):
 # --------------------------------------------------------
 def send_email(html):
     msg = MIMEMultipart("alternative")
-    msg["Subject"] = "Ofertas de trabajo – Perfil Junior"
+    msg["Subject"] = "Ofertas recientes de trabajo – Perfil Junior"
     msg["From"] = SENDER
     msg["To"] = RECEIVER
     msg.attach(MIMEText(html, "html"))
@@ -202,7 +247,7 @@ def send_email(html):
 # EJECUCIÓN PRINCIPAL
 # --------------------------------------------------------
 def main():
-    print("Buscando ofertas para perfil junior...")
+    print("Buscando ofertas recientes para perfil junior...")
 
     google = search_google_jobs()
     linkedin = search_linkedin_jobs()
