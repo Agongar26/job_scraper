@@ -10,84 +10,116 @@ RECEIVER = "alejandrogonzalezgarcia540@gmail.com"
 SERPAPI_KEY = os.environ.get("SERPAPI_KEY")
 
 KEYWORDS = [
-    "desarrollador", "developer", "software", "programador",
-    "java", "kotlin", "android", "it", "soporte",
-    "ciberseguridad", "seguridad", "soc", "xdr",
-    "analista", "security", "backend", "frontend",
-    "fullstack", "ingeniero"
+    "developer", "desarrollador", "programador", "software",
+    "java", "kotlin", "android",
+    "it", "soporte",
+    "ciberseguridad", "cybersecurity", "soc",
+    "security", "analista", "ingeniero",
+    "backend", "frontend", "fullstack"
+]
+
+LOCATIONS = [
+    "Huelva, Spain",
+    "Andalucía, Spain",
+    "Spain"
+]
+
+SEARCH_QUERIES = [
+    "developer",
+    "programador",
+    "cybersecurity",
+    "it jobs",
+    "python developer",
+    "java developer"
 ]
 
 
-# --------------------------------------------------------
-# SCRAPER: GOOGLE JOBS (Incluye Indeed y muchos más)
-# --------------------------------------------------------
-def scrape_google_jobs():
-    url = "https://serpapi.com/search"
-    params = {
-        "engine": "google_jobs",
-        "q": "developer OR it OR ciberseguridad",
-        "location": "Huelva, Spain",
-        "api_key": SERPAPI_KEY
-    }
+def serpapi_request(engine, query, location):
+    try:
+        url = "https://serpapi.com/search"
+        params = {
+            "engine": engine,
+            "q": query if engine == "google_jobs" else None,
+            "keywords": query if engine == "linkedin_jobs" else None,
+            "location": location,
+            "api_key": SERPAPI_KEY
+        }
+        params = {k: v for k, v in params.items() if v is not None}
 
-    r = requests.get(url, params=params)
-    data = r.json()
+        r = requests.get(url, params=params)
+        data = r.json()
 
+        return data
+    except Exception as e:
+        print(f"Error SerpAPI: {e}")
+        return {}
+
+
+def parse_google_jobs(data):
     offers = []
     jobs = data.get("jobs_results", [])
 
     for job in jobs:
-        title = job.get("title", "").strip()
-        company = job.get("company_name", "Desconocida")
-        location = job.get("location", "No indicada")
-        link = job.get("job_highlights", [{}])[0].get("link") or job.get("related_links", [{}])[0].get("link", "")
+        title = job.get("title", "")
+        if not any(k in title.lower() for k in KEYWORDS):
+            continue
 
-        if any(k in title.lower() for k in KEYWORDS):
-            offers.append((title, company, location, link))
+        offers.append((
+            title,
+            job.get("company_name", "Desconocida"),
+            job.get("location", "No indicada"),
+            job.get("related_links", [{}])[0].get("link", "")
+        ))
 
     return offers
 
 
-# --------------------------------------------------------
-# SCRAPER: LINKEDIN (via SerpAPI)
-# --------------------------------------------------------
-def scrape_linkedin():
-    url = "https://serpapi.com/search"
-    params = {
-        "engine": "linkedin_jobs",
-        "keywords": "developer it ciberseguridad",
-        "location": "Huelva, Spain",
-        "api_key": SERPAPI_KEY
-    }
-
-    r = requests.get(url, params=params)
-    data = r.json()
-
+def parse_linkedin_jobs(data):
     offers = []
-
     jobs = data.get("jobs_results", [])
 
     for job in jobs:
-        title = job.get("title", "").strip()
-        company = job.get("company", {}).get("name", "Desconocida")
-        location = job.get("location", "No indicada")
-        link = job.get("job_url", "")
+        title = job.get("title", "")
+        if not any(k in title.lower() for k in KEYWORDS):
+            continue
 
-        if any(k in title.lower() for k in KEYWORDS):
-            offers.append((title, company, location, link))
+        offers.append((
+            title,
+            job.get("company", {}).get("name", "Desconocida"),
+            job.get("location", "No indicada"),
+            job.get("job_url", "")
+        ))
 
     return offers
 
 
-# --------------------------------------------------------
-# CREAR TABLA HTML
-# --------------------------------------------------------
+def scrape_jobs():
+    all_offers = set()
+
+    for loc in LOCATIONS:
+        for q in SEARCH_QUERIES:
+
+            # Google Jobs
+            data = serpapi_request("google_jobs", q, loc)
+            google_offers = parse_google_jobs(data)
+            for o in google_offers:
+                all_offers.add(o)
+
+            # LinkedIn Jobs
+            data = serpapi_request("linkedin_jobs", q, loc)
+            linkedin_offers = parse_linkedin_jobs(data)
+            for o in linkedin_offers:
+                all_offers.add(o)
+
+    return list(all_offers)
+
+
 def build_html_table(data):
     if not data:
         return "<p>No se encontraron ofertas esta semana.</p>"
 
     table = """
-    <h2>Ofertas de empleo (IT / Desarrollo / Ciberseguridad)</h2>
+    <h2>Ofertas encontradas (IT / Desarrollo / Ciberseguridad)</h2>
     <table border='1' cellpadding='6' cellspacing='0' style='border-collapse: collapse;'>
         <tr style='background:#f0f0f0;'>
             <th>Puesto</th>
@@ -111,9 +143,6 @@ def build_html_table(data):
     return table
 
 
-# --------------------------------------------------------
-# ENVIAR EMAIL
-# --------------------------------------------------------
 def send_email(html):
     msg = MIMEMultipart("alternative")
     msg["Subject"] = "Ofertas de trabajo – Reporte Semanal"
@@ -128,21 +157,13 @@ def send_email(html):
     print("Correo enviado correctamente.")
 
 
-# --------------------------------------------------------
-# PRINCIPAL
-# --------------------------------------------------------
 def main():
-    print("Buscando ofertas...")
+    print("Buscando ofertas (Google + LinkedIn)...")
 
-    google_jobs = scrape_google_jobs()
-    linkedin = scrape_linkedin()
+    offers = scrape_jobs()
+    print(f"Total ofertas encontradas: {len(offers)}")
 
-    print(f"Google Jobs: {len(google_jobs)}")
-    print(f"LinkedIn Jobs: {len(linkedin)}")
-
-    all_jobs = google_jobs + linkedin
-    html = build_html_table(all_jobs)
-
+    html = build_html_table(offers)
     send_email(html)
 
 
