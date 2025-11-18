@@ -1,151 +1,125 @@
+import os
 import requests
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-import os
 
-SENDER = os.environ.get("EMAIL_SENDER")
-APP_PASSWORD = os.environ.get("EMAIL_PASSWORD")
+# --------------------------------------------------------
+# CONFIG
+# --------------------------------------------------------
+SENDER = os.environ["EMAIL_SENDER"]
+APP_PASSWORD = os.environ["EMAIL_PASSWORD"]
+SERPAPI_KEY = os.environ["SERPAPI_KEY"]
 RECEIVER = "alejandrogonzalezgarcia540@gmail.com"
-SERPAPI_KEY = os.environ.get("SERPAPI_KEY")
 
 KEYWORDS = [
-    "developer", "desarrollador", "programador", "software",
-    "java", "kotlin", "android",
-    "it", "soporte",
-    "ciberseguridad", "cybersecurity", "soc",
-    "security", "analista", "ingeniero",
-    "backend", "frontend", "fullstack"
+    "desarrollador", "developer", "java", "kotlin", "android",
+    "multiplataforma", "it", "soporte", "ciberseguridad",
+    "soc", "xdr", "analista", "security"
 ]
 
-LOCATIONS = [
-    "Huelva, Spain",
-    "Andalucía, Spain",
-    "Spain"
-]
+# --------------------------------------------------------
+# SERPAPI – GOOGLE JOBS
+# --------------------------------------------------------
+def search_google_jobs():
+    url = "https://serpapi.com/search"
+    params = {
+        "engine": "google_jobs",
+        "q": "developer OR ciberseguridad OR it job",
+        "location": "Spain",
+        "hl": "es",
+        "api_key": SERPAPI_KEY
+    }
 
-SEARCH_QUERIES = [
-    "developer",
-    "programador",
-    "cybersecurity",
-    "it jobs",
-    "python developer",
-    "java developer"
-]
-
-
-def serpapi_request(engine, query, location):
     try:
-        url = "https://serpapi.com/search"
-        params = {
-            "engine": engine,
-            "q": query if engine == "google_jobs" else None,
-            "keywords": query if engine == "linkedin_jobs" else None,
-            "location": location,
-            "api_key": SERPAPI_KEY
-        }
-        params = {k: v for k, v in params.items() if v is not None}
-
         r = requests.get(url, params=params)
         data = r.json()
-
-        return data
+        jobs = data.get("jobs_results", [])
     except Exception as e:
-        print(f"Error SerpAPI: {e}")
-        return {}
+        print("Error Google Jobs:", e)
+        return []
 
-
-def parse_google_jobs(data):
     offers = []
-    jobs = data.get("jobs_results", [])
-
     for job in jobs:
-        title = job.get("title", "")
-        if not any(k in title.lower() for k in KEYWORDS):
-            continue
-
-        offers.append((
-            title,
-            job.get("company_name", "Desconocida"),
-            job.get("location", "No indicada"),
-            job.get("related_links", [{}])[0].get("link", "")
-        ))
-
+        title = job.get("title", "").strip()
+        if any(k in title.lower() for k in KEYWORDS):
+            offers.append({
+                "source": "Google Jobs",
+                "title": title,
+                "company": job.get("company_name", "No indicada"),
+                "location": job.get("location", "No indicada"),
+                "link": job.get("job_apply_link", job.get("related_links", [{}])[0].get("link", ""))
+            })
     return offers
 
+# --------------------------------------------------------
+# SERPAPI – LINKEDIN JOBS
+# --------------------------------------------------------
+def search_linkedin_jobs():
+    url = "https://serpapi.com/search"
+    params = {
+        "engine": "linkedin_jobs",
+        "q": "developer OR ciberseguridad OR IT",
+        "location": "Spain",
+        "api_key": SERPAPI_KEY
+    }
 
-def parse_linkedin_jobs(data):
+    try:
+        r = requests.get(url, params=params)
+        data = r.json()
+        jobs = data.get("jobs_results", [])
+    except Exception as e:
+        print("Error LinkedIn Jobs:", e)
+        return []
+
     offers = []
-    jobs = data.get("jobs_results", [])
-
     for job in jobs:
-        title = job.get("title", "")
-        if not any(k in title.lower() for k in KEYWORDS):
-            continue
-
-        offers.append((
-            title,
-            job.get("company", {}).get("name", "Desconocida"),
-            job.get("location", "No indicada"),
-            job.get("job_url", "")
-        ))
-
+        title = job.get("title", "").strip()
+        if any(k in title.lower() for k in KEYWORDS):
+            offers.append({
+                "source": "LinkedIn",
+                "title": title,
+                "company": job.get("company_name", "No indicada"),
+                "location": job.get("location", "No indicada"),
+                "link": job.get("linkedin_job_url", "")
+            })
     return offers
 
+# --------------------------------------------------------
+# BUILD HTML TABLE
+# --------------------------------------------------------
+def build_html_table(items):
+    if not items:
+        return "<p>No se encontraron ofertas hoy.</p>"
 
-def scrape_jobs():
-    all_offers = set()
-
-    for loc in LOCATIONS:
-        for q in SEARCH_QUERIES:
-
-            # Google Jobs
-            data = serpapi_request("google_jobs", q, loc)
-            google_offers = parse_google_jobs(data)
-            for o in google_offers:
-                all_offers.add(o)
-
-            # LinkedIn Jobs
-            data = serpapi_request("linkedin_jobs", q, loc)
-            linkedin_offers = parse_linkedin_jobs(data)
-            for o in linkedin_offers:
-                all_offers.add(o)
-
-    return list(all_offers)
-
-
-def build_html_table(data):
-    if not data:
-        return "<p>No se encontraron ofertas esta semana.</p>"
-
-    table = """
-    <h2>Ofertas encontradas (IT / Desarrollo / Ciberseguridad)</h2>
+    html = """
+    <h2>Ofertas encontradas (Google Jobs + LinkedIn)</h2>
     <table border='1' cellpadding='6' cellspacing='0' style='border-collapse: collapse;'>
-        <tr style='background:#f0f0f0;'>
-            <th>Puesto</th>
-            <th>Empresa</th>
-            <th>Ubicación</th>
-            <th>Enlace</th>
+        <tr style='background:#eee;'>
+            <th>Fuente</th><th>Puesto</th><th>Empresa</th><th>Ubicación</th><th>Enlace</th>
         </tr>
     """
 
-    for title, company, location, link in data:
-        table += f"""
+    for j in items:
+        html += f"""
         <tr>
-            <td>{title}</td>
-            <td>{company}</td>
-            <td>{location}</td>
-            <td><a href='{link}'>Ver oferta</a></td>
+            <td>{j['source']}</td>
+            <td>{j['title']}</td>
+            <td>{j['company']}</td>
+            <td>{j['location']}</td>
+            <td><a href="{j['link']}">Ver oferta</a></td>
         </tr>
         """
 
-    table += "</table>"
-    return table
+    html += "</table>"
+    return html
 
-
+# --------------------------------------------------------
+# SEND EMAIL
+# --------------------------------------------------------
 def send_email(html):
     msg = MIMEMultipart("alternative")
-    msg["Subject"] = "Ofertas de trabajo – Reporte Semanal"
+    msg["Subject"] = "Ofertas de trabajo – Reporte diario"
     msg["From"] = SENDER
     msg["To"] = RECEIVER
     msg.attach(MIMEText(html, "html"))
@@ -156,16 +130,23 @@ def send_email(html):
 
     print("Correo enviado correctamente.")
 
-
+# --------------------------------------------------------
+# MAIN
+# --------------------------------------------------------
 def main():
-    print("Buscando ofertas (Google + LinkedIn)...")
+    print("Buscando ofertas...")
 
-    offers = scrape_jobs()
-    print(f"Total ofertas encontradas: {len(offers)}")
+    google = search_google_jobs()
+    linkedin = search_linkedin_jobs()
 
-    html = build_html_table(offers)
+    all_jobs = google + linkedin
+
+    print(f"Resultados Google Jobs: {len(google)}")
+    print(f"Resultados LinkedIn: {len(linkedin)}")
+    print(f"Total: {len(all_jobs)}")
+
+    html = build_html_table(all_jobs)
     send_email(html)
-
 
 if __name__ == "__main__":
     main()
