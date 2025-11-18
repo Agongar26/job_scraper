@@ -25,7 +25,7 @@ def search_google_jobs():
     url = "https://serpapi.com/search"
     params = {
         "engine": "google_jobs",
-        "q": "\"java junior\" OR \"android developer junior\" OR \"it junior\" OR \"ciberseguridad junior\" OR \"junior developer\" OR \"junior software developer\" OR \"junior it support\" OR \"security analyst junior\" OR \"soc analyst junior\"",
+        "q": "developer OR ciberseguridad OR it",
         "location": "Spain",
         "hl": "es",
         "safe": "off",
@@ -60,7 +60,7 @@ def search_linkedin_jobs():
     url = "https://serpapi.com/search"
     params = {
         "engine": "linkedin_jobs",
-        "q": "\"java junior\" OR \"android developer junior\" OR \"it junior\" OR \"ciberseguridad junior\" OR \"junior developer\" OR \"junior software developer\" OR \"junior it support\" OR \"security analyst junior\" OR \"soc analyst junior\"",
+        "q": "developer OR ciberseguridad OR IT",
         "location": "Spain",
         "api_key": SERPAPI_KEY
     }
