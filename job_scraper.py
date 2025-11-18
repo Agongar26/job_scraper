@@ -4,111 +4,126 @@ import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import os
-import xml.etree.ElementTree as ET
 
-# --------------------------------------------------------
-# CONFIGURACIÓN DEL CORREO (desde secretos de GitHub)
-# --------------------------------------------------------
 SENDER = os.environ.get("EMAIL_SENDER")
 APP_PASSWORD = os.environ.get("EMAIL_PASSWORD")
 RECEIVER = "alejandrogonzalezgarcia540@gmail.com"
 
 KEYWORDS = [
-    "Desarrollador", "Developer", "Java", "Kotlin", "Android",
-    "Multiplataforma", "IT", "Soporte", "Ciberseguridad",
-    "SOC", "XDR", "Analista", "Security"
+    "Desarrollador", "Developer", "Software", "Programador",
+    "Java", "Kotlin", "Android", "IT", "Soporte",
+    "Ciberseguridad", "Seguridad", "SOC", "XDR",
+    "Analista", "Security", "Backend", "Frontend",
+    "Fullstack", "Ingeniero"
 ]
 
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 
 # --------------------------------------------------------
-# SCRAPER: INDEED
+# SCRAPER INDEED (2025)
 # --------------------------------------------------------
 def scrape_indeed():
     url = "https://es.indeed.com/jobs?q=developer+it+ciberseguridad&l=Huelva"
     r = requests.get(url, headers=HEADERS)
     soup = BeautifulSoup(r.text, "html.parser")
-    offers = []
 
-    for job in soup.select("div.job_seen_beacon"):
-        title = job.select_one("h2 span")
+    offers = []
+    jobs = soup.select("ul.jobsearch-ResultsList li")
+
+    for job in jobs:
+        title = job.select_one(".jobTitle span")
+        if not title:
+            continue
+
         company = job.select_one(".companyName")
-        link = job.select_one("a")
         location = job.select_one(".companyLocation")
+        link = job.select_one(".jobTitle a")
+
+        job_title = title.text.strip()
+        job_company = company.text.strip() if company else "No especificada"
+        job_location = location.text.strip() if location else "No indicada"
+        job_link = "https://es.indeed.com" + link["href"] if link else ""
+
+        if any(k.lower() in job_title.lower() for k in KEYWORDS):
+            offers.append((job_title, job_company, job_location, job_link))
+
+    return offers
+
+
+# --------------------------------------------------------
+# SCRAPER TECNOEMPLEO (2025)
+# --------------------------------------------------------
+def scrape_tecnoempleo():
+    url = "https://www.tecnoempleo.com/ofertas-trabajo-huelva"
+    r = requests.get(url, headers=HEADERS)
+    soup = BeautifulSoup(r.text, "html.parser")
+
+    offers = []
+    jobs = soup.select("article.box_offer")
+
+    for job in jobs:
+        title = job.select_one(".title_offer a")
+        company = job.select_one(".name")
+        location = job.select_one(".localidad")
+        link = job.select_one(".title_offer a")
 
         if not title:
             continue
 
         job_title = title.text.strip()
         job_company = company.text.strip() if company else "No especificada"
-        job_link = "https://es.indeed.com" + link["href"] if link else ""
-        job_location = location.text if location else "No indicada"
+        job_location = location.text.strip() if location else "No indicada"
+        job_link = "https://www.tecnoempleo.com" + link["href"] if link else ""
 
         if any(k.lower() in job_title.lower() for k in KEYWORDS):
-            offers.append(("Indeed", job_title, job_company, job_location, job_link))
+            offers.append((job_title, job_company, job_location, job_link))
 
     return offers
 
 
 # --------------------------------------------------------
-# SCRAPER: TECNOEMPLEO
+# SCRAPER LINKEDIN HTML (NO RSS)
 # --------------------------------------------------------
-def scrape_tecnoempleo():
-    url = "https://www.tecnoempleo.com/busqueda-empleo.php?pr=Huelva&te=remoto"
+def scrape_linkedin():
+    url = "https://www.linkedin.com/jobs/search/?keywords=developer%20it%20ciberseguridad&location=Huelva"
     r = requests.get(url, headers=HEADERS)
     soup = BeautifulSoup(r.text, "html.parser")
+
     offers = []
+    jobs = soup.select("li")
 
-    for job in soup.select(".oferta"):
-        title = job.select_one(".titulo_oferta").text.strip()
-        company = job.select_one(".empresa_oferta").text.strip()
-        link = "https://www.tecnoempleo.com" + job.select_one("a")["href"]
+    for job in jobs:
+        title = job.select_one("h3")
+        link = job.select_one("a.base-card__full-link")
+        company = job.select_one("h4")
+        location = job.select_one(".job-search-card__location")
 
-        if any(k.lower() in title.lower() for k in KEYWORDS):
-            offers.append(("Tecnoempleo", title, company, "Huelva/Remoto", link))
+        if not title or not link:
+            continue
+
+        job_title = title.text.strip()
+        job_company = company.text.strip() if company else "No especificada"
+        job_location = location.text.strip() if location else "No indicada"
+        job_link = link.get("href")
+
+        if any(k.lower() in job_title.lower() for k in KEYWORDS):
+            offers.append((job_title, job_company, job_location, job_link))
 
     return offers
 
 
 # --------------------------------------------------------
-# SCRAPER: LINKEDIN (LEGAL – vía RSS)
-# --------------------------------------------------------
-def scrape_linkedin_rss():
-    url = "https://www.linkedin.com/jobs-guest/jobs/rss/?keywords=developer%20ciberseguridad&location=Huelva"
-    r = requests.get(url, headers=HEADERS)
-
-    offers = []
-    try:
-        root = ET.fromstring(r.text)
-
-        for item in root.findall(".//item"):
-            title = item.find("title").text or "Sin título"
-            link = item.find("link").text or ""
-            description = item.find("description").text or ""
-            location = "Huelva"
-
-            if any(k.lower() in title.lower() for k in KEYWORDS):
-                offers.append(("LinkedIn", title, "Desconocida", location, link))
-
-    except Exception as e:
-        print("Error leyendo RSS de LinkedIn:", e)
-
-    return offers
-
-
-# --------------------------------------------------------
-# CREAR TABLA HTML
+# HTML TABLE
 # --------------------------------------------------------
 def build_html_table(data):
     if not data:
         return "<p>No se encontraron ofertas esta semana.</p>"
 
     table = """
-    <h2>Ofertas de empleo (Indeed / TecnoEmpleo / LinkedIn)</h2>
+    <h2>Ofertas de empleo actualizadas (IT / Desarrollo / Ciberseguridad)</h2>
     <table border='1' cellpadding='6' cellspacing='0' style='border-collapse: collapse;'>
         <tr style='background:#f0f0f0;'>
-            <th>Fuente</th>
             <th>Puesto</th>
             <th>Empresa</th>
             <th>Ubicación</th>
@@ -116,10 +131,9 @@ def build_html_table(data):
         </tr>
     """
 
-    for source, title, company, location, link in data:
+    for title, company, location, link in data:
         table += f"""
         <tr>
-            <td>{source}</td>
             <td>{title}</td>
             <td>{company}</td>
             <td>{location}</td>
@@ -132,41 +146,38 @@ def build_html_table(data):
 
 
 # --------------------------------------------------------
-# ENVIAR CORREO
+# SEND EMAIL
 # --------------------------------------------------------
 def send_email(html):
-    try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = "Ofertas de trabajo – Lunes 08:00 AM"
-        msg["From"] = SENDER
-        msg["To"] = RECEIVER
-        msg.attach(MIMEText(html, "html"))
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = "Ofertas de trabajo – Reporte semanal"
+    msg["From"] = SENDER
+    msg["To"] = RECEIVER
 
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-            server.login(SENDER, APP_PASSWORD)
-            server.sendmail(SENDER, RECEIVER, msg.as_string())
+    msg.attach(MIMEText(html, "html"))
 
-        print("Correo enviado correctamente ✅")
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+        server.login(SENDER, APP_PASSWORD)
+        server.sendmail(SENDER, RECEIVER, msg.as_string())
 
-    except Exception as e:
-        print("Error enviando correo:", e)
-        raise
+    print("Correo enviado correctamente.")
 
 
 # --------------------------------------------------------
-# EJECUCIÓN PRINCIPAL
+# MAIN
 # --------------------------------------------------------
 def main():
     indeed = scrape_indeed()
-    tecnoempleo = scrape_tecnoempleo()
-    linkedin = scrape_linkedin_rss()
+    tecno = scrape_tecnoempleo()
+    linkedin = scrape_linkedin()
 
     print("Indeed:", len(indeed))
-    print("Tecnoempleo:", len(tecnoempleo))
+    print("TecnoEmpleo:", len(tecno))
     print("LinkedIn:", len(linkedin))
 
-    all_jobs = indeed + tecnoempleo + linkedin
+    all_jobs = indeed + tecno + linkedin
     html = build_html_table(all_jobs)
+
     send_email(html)
 
 
