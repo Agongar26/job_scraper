@@ -37,6 +37,7 @@ def search_google_jobs():
     try:
         r = requests.get(url, params=params)
         data = r.json()
+        print("DEBUG SERPAPI:", data)
         jobs = data.get("jobs_results", [])
     except Exception as e:
         print("Error Google Jobs:", e)
