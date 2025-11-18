@@ -161,6 +161,10 @@ def main():
     tecnoempleo = scrape_tecnoempleo()
     linkedin = scrape_linkedin_rss()
 
+    print("Indeed:", len(indeed))
+    print("Tecnoempleo:", len(tecnoempleo))
+    print("LinkedIn:", len(linkedin))
+
     all_jobs = indeed + tecnoempleo + linkedin
     html = build_html_table(all_jobs)
     send_email(html)
