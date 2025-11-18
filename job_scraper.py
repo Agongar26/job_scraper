@@ -13,10 +13,12 @@ APP_PASSWORD = os.environ["EMAIL_PASSWORD"]
 SERPAPI_KEY = os.environ["SERPAPI_KEY"]
 RECEIVER = "alejandrogonzalezgarcia540@gmail.com"
 
+# Palabras clave basadas en tus habilidades
 KEYWORDS = [
-    "desarrollador", "developer", "java", "kotlin", "android",
-    "multiplataforma", "it", "soporte", "ciberseguridad",
-    "soc", "xdr", "analista", "security"
+    "junior", "prácticas", "intern", "desarrollador", "developer",
+    "java", "kotlin", "sql", "c#", "mongodb", "mvc",
+    "ciberseguridad", "security", "redes", "hardening", "logs",
+    "windows", "linux"
 ]
 
 # --------------------------------------------------------
@@ -26,7 +28,7 @@ def search_google_jobs():
     url = "https://serpapi.com/search"
     params = {
         "engine": "google_jobs",
-        "q": "developer OR ciberseguridad OR it",
+        "q": " OR ".join(KEYWORDS),
         "location": "Spain",
         "hl": "es",
         "safe": "off",
@@ -61,7 +63,7 @@ def search_linkedin_jobs():
     url = "https://serpapi.com/search"
     params = {
         "engine": "linkedin_jobs",
-        "q": "developer OR ciberseguridad OR IT",
+        "q": " OR ".join(KEYWORDS),
         "location": "Spain",
         "api_key": SERPAPI_KEY
     }
@@ -91,7 +93,7 @@ def search_linkedin_jobs():
 # SCRAPER – INDEED
 # --------------------------------------------------------
 def scrape_indeed():
-    url = "https://es.indeed.com/jobs?q=developer+it+ciberseguridad&l=Huelva"
+    url = "https://es.indeed.com/jobs?q=junior+developer+OR+prácticas&l=Spain"
     headers = {"User-Agent": "Mozilla/5.0"}
     r = requests.get(url, headers=headers)
     soup = BeautifulSoup(r.text, "html.parser")
@@ -122,7 +124,7 @@ def scrape_indeed():
 # SCRAPER – TECNOEMPLEO
 # --------------------------------------------------------
 def scrape_tecnoempleo():
-    url = "https://www.tecnoempleo.com/busqueda-empleo.php?pr=Huelva&te=remoto"
+    url = "https://www.tecnoempleo.com/busqueda-empleo.php?pr=Spain&te=remoto"
     headers = {"User-Agent": "Mozilla/5.0"}
     r = requests.get(url, headers=headers)
     soup = BeautifulSoup(r.text, "html.parser")
@@ -132,14 +134,14 @@ def scrape_tecnoempleo():
         title = job.select_one(".titulo_oferta").text.strip()
         company = job.select_one(".empresa_oferta").text.strip()
         link = "https://www.tecnoempleo.com" + job.select_one("a")["href"]
+        salary_elem = job.select_one(".salario")
 
         if any(k in title.lower() for k in KEYWORDS):
-            salary_elem = job.select_one(".salario")
             offers.append({
                 "source": "TecnoEmpleo",
                 "title": title,
                 "company": company,
-                "location": "Huelva/Remoto",
+                "location": "Spain/Remoto",
                 "salary": salary_elem.text.strip() if salary_elem else "No especificado",
                 "link": link
             })
@@ -150,10 +152,10 @@ def scrape_tecnoempleo():
 # --------------------------------------------------------
 def build_html_table(items):
     if not items:
-        return "<p>No se encontraron ofertas hoy.</p>"
+        return "<p>No se encontraron ofertas para tu perfil esta semana.</p>"
 
     html = """
-    <h2>Ofertas de empleo (Google Jobs + LinkedIn + Indeed + TecnoEmpleo)</h2>
+    <h2>Ofertas de empleo para perfil junior</h2>
     <table border='1' cellpadding='6' cellspacing='0' style='border-collapse: collapse;'>
         <tr style='background:#eee;'>
             <th>Fuente</th>
@@ -185,7 +187,7 @@ def build_html_table(items):
 # --------------------------------------------------------
 def send_email(html):
     msg = MIMEMultipart("alternative")
-    msg["Subject"] = "Ofertas de trabajo – Reporte semanal"
+    msg["Subject"] = "Ofertas de trabajo – Perfil Junior"
     msg["From"] = SENDER
     msg["To"] = RECEIVER
     msg.attach(MIMEText(html, "html"))
@@ -200,7 +202,7 @@ def send_email(html):
 # EJECUCIÓN PRINCIPAL
 # --------------------------------------------------------
 def main():
-    print("Buscando ofertas...")
+    print("Buscando ofertas para perfil junior...")
 
     google = search_google_jobs()
     linkedin = search_linkedin_jobs()
@@ -209,10 +211,10 @@ def main():
 
     all_jobs = google + linkedin + indeed + tecno
 
-    print(f"Resultados Google Jobs: {len(google)}")
-    print(f"Resultados LinkedIn: {len(linkedin)}")
-    print(f"Resultados Indeed: {len(indeed)}")
-    print(f"Resultados TecnoEmpleo: {len(tecno)}")
+    print(f"Google Jobs: {len(google)}")
+    print(f"LinkedIn: {len(linkedin)}")
+    print(f"Indeed: {len(indeed)}")
+    print(f"TecnoEmpleo: {len(tecno)}")
     print(f"Total ofertas encontradas: {len(all_jobs)}")
 
     html = build_html_table(all_jobs)
