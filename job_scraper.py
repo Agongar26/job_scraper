@@ -13,7 +13,7 @@ APP_PASSWORD = os.environ["EMAIL_PASSWORD"]
 SERPAPI_KEY = os.environ["SERPAPI_KEY"]
 RECEIVER = "alejandrogonzalezgarcia540@gmail.com"
 
-# Palabras clave basadas en tu perfil
+# Palabras clave basadas en tus habilidades
 KEYWORDS = [
     "junior", "prácticas", "intern", "desarrollador", "developer",
     "java", "kotlin", "sql", "c#", "mongodb", "mvc",
@@ -152,7 +152,7 @@ def scrape_tecnoempleo():
 # --------------------------------------------------------
 def build_html_table(items):
     if not items:
-        return "<p>No se encontraron ofertas para tu perfil.</p>"
+        return "<p>No se encontraron ofertas para tu perfil esta semana.</p>"
 
     html = """
     <h2>Ofertas de empleo para perfil junior</h2>
