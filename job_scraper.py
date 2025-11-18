@@ -8,8 +8,8 @@ import os
 # --------------------------------------------------------
 # CONFIGURACIÓN DEL CORREO (desde secretos de GitHub)
 # --------------------------------------------------------
-SENDER = os.environ["EMAIL_SENDER"]
-APP_PASSWORD = os.environ["EMAIL_PASSWORD"]
+SENDER = os.environ.get("EMAIL_SENDER")
+APP_PASSWORD = os.environ.get("EMAIL_PASSWORD")
 RECEIVER = "alejandrogonzalezgarcia540@gmail.com"
 
 KEYWORDS = [
@@ -23,7 +23,8 @@ KEYWORDS = [
 # --------------------------------------------------------
 def scrape_indeed():
     url = "https://es.indeed.com/jobs?q=developer+it+ciberseguridad&l=Huelva"
-    r = requests.get(url)
+    headers = {"User-Agent": "Mozilla/5.0"}
+    r = requests.get(url, headers=headers)
     soup = BeautifulSoup(r.text, "html.parser")
     offers = []
 
@@ -51,7 +52,8 @@ def scrape_indeed():
 # --------------------------------------------------------
 def scrape_tecnoempleo():
     url = "https://www.tecnoempleo.com/busqueda-empleo.php?pr=Huelva&te=remoto"
-    r = requests.get(url)
+    headers = {"User-Agent": "Mozilla/5.0"}
+    r = requests.get(url, headers=headers)
     soup = BeautifulSoup(r.text, "html.parser")
     offers = []
 
@@ -100,26 +102,35 @@ def build_html_table(data):
 # ENVIAR CORREO
 # --------------------------------------------------------
 def send_email(html):
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = "Ofertas de trabajo – Lunes 08:00 AM"
-    msg["From"] = SENDER
-    msg["To"] = RECEIVER
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = "Ofertas de trabajo – Lunes 08:00 AM"
+        msg["From"] = SENDER
+        msg["To"] = RECEIVER
 
-    msg.attach(MIMEText(html, "html"))
+        msg.attach(MIMEText(html, "html"))
 
-    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-        server.login(SENDER, APP_PASSWORD.encode('utf-8'))
-        server.sendmail(SENDER, RECEIVER, msg.as_string())
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(SENDER, APP_PASSWORD)
+            server.sendmail(SENDER, RECEIVER, msg.as_string())
+        print("Correo enviado correctamente ✅")
+    except Exception as e:
+        print(f"Error enviando el correo: {e}")
+        raise
 
 # --------------------------------------------------------
 # EJECUCIÓN PRINCIPAL
 # --------------------------------------------------------
 def main():
-    indeed = scrape_indeed()
-    tecnoempleo = scrape_tecnoempleo()
-    all_jobs = indeed + tecnoempleo
-    html = build_html_table(all_jobs)
-    send_email(html)
+    try:
+        indeed = scrape_indeed()
+        tecnoempleo = scrape_tecnoempleo()
+        all_jobs = indeed + tecnoempleo
+        html = build_html_table(all_jobs)
+        send_email(html)
+    except Exception as e:
+        print(f"Error general en el scraper: {e}")
+        raise
 
 if __name__ == "__main__":
     main()
