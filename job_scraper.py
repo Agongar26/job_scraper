@@ -5,7 +5,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 # --------------------------------------------------------
-# CONFIG
+# CONFIGURACIÓN
 # --------------------------------------------------------
 SENDER = os.environ["EMAIL_SENDER"]
 APP_PASSWORD = os.environ["EMAIL_PASSWORD"]
@@ -25,9 +25,10 @@ def search_google_jobs():
     url = "https://serpapi.com/search"
     params = {
         "engine": "google_jobs",
-        "q": "developer OR ciberseguridad OR it job",
+        "q": "developer OR ciberseguridad OR it",
         "location": "Spain",
         "hl": "es",
+        "safe": "off",
         "api_key": SERPAPI_KEY
     }
 
@@ -86,7 +87,7 @@ def search_linkedin_jobs():
     return offers
 
 # --------------------------------------------------------
-# BUILD HTML TABLE
+# CREAR TABLA HTML
 # --------------------------------------------------------
 def build_html_table(items):
     if not items:
@@ -115,11 +116,11 @@ def build_html_table(items):
     return html
 
 # --------------------------------------------------------
-# SEND EMAIL
+# ENVIAR CORREO
 # --------------------------------------------------------
 def send_email(html):
     msg = MIMEMultipart("alternative")
-    msg["Subject"] = "Ofertas de trabajo – Reporte diario"
+    msg["Subject"] = "Ofertas de trabajo – Reporte semanal"
     msg["From"] = SENDER
     msg["To"] = RECEIVER
     msg.attach(MIMEText(html, "html"))
@@ -131,7 +132,7 @@ def send_email(html):
     print("Correo enviado correctamente.")
 
 # --------------------------------------------------------
-# MAIN
+# EJECUCIÓN PRINCIPAL
 # --------------------------------------------------------
 def main():
     print("Buscando ofertas...")
@@ -143,7 +144,7 @@ def main():
 
     print(f"Resultados Google Jobs: {len(google)}")
     print(f"Resultados LinkedIn: {len(linkedin)}")
-    print(f"Total: {len(all_jobs)}")
+    print(f"Total ofertas encontradas: {len(all_jobs)}")
 
     html = build_html_table(all_jobs)
     send_email(html)
