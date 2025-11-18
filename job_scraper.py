@@ -1,5 +1,4 @@
 import requests
-from bs4 import BeautifulSoup
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -8,120 +7,87 @@ import os
 SENDER = os.environ.get("EMAIL_SENDER")
 APP_PASSWORD = os.environ.get("EMAIL_PASSWORD")
 RECEIVER = "alejandrogonzalezgarcia540@gmail.com"
+SERPAPI_KEY = os.environ.get("SERPAPI_KEY")
 
 KEYWORDS = [
-    "Desarrollador", "Developer", "Software", "Programador",
-    "Java", "Kotlin", "Android", "IT", "Soporte",
-    "Ciberseguridad", "Seguridad", "SOC", "XDR",
-    "Analista", "Security", "Backend", "Frontend",
-    "Fullstack", "Ingeniero"
+    "desarrollador", "developer", "software", "programador",
+    "java", "kotlin", "android", "it", "soporte",
+    "ciberseguridad", "seguridad", "soc", "xdr",
+    "analista", "security", "backend", "frontend",
+    "fullstack", "ingeniero"
 ]
 
-HEADERS = {"User-Agent": "Mozilla/5.0"}
-
 
 # --------------------------------------------------------
-# SCRAPER INDEED (2025)
+# SCRAPER: GOOGLE JOBS (Incluye Indeed y muchos más)
 # --------------------------------------------------------
-def scrape_indeed():
-    url = "https://es.indeed.com/jobs?q=developer+it+ciberseguridad&l=Huelva"
-    r = requests.get(url, headers=HEADERS)
-    soup = BeautifulSoup(r.text, "html.parser")
+def scrape_google_jobs():
+    url = "https://serpapi.com/search"
+    params = {
+        "engine": "google_jobs",
+        "q": "developer OR it OR ciberseguridad",
+        "location": "Huelva, Spain",
+        "api_key": SERPAPI_KEY
+    }
+
+    r = requests.get(url, params=params)
+    data = r.json()
 
     offers = []
-    jobs = soup.select("ul.jobsearch-ResultsList li")
+    jobs = data.get("jobs_results", [])
 
     for job in jobs:
-        title = job.select_one(".jobTitle span")
-        if not title:
-            continue
+        title = job.get("title", "").strip()
+        company = job.get("company_name", "Desconocida")
+        location = job.get("location", "No indicada")
+        link = job.get("job_highlights", [{}])[0].get("link") or job.get("related_links", [{}])[0].get("link", "")
 
-        company = job.select_one(".companyName")
-        location = job.select_one(".companyLocation")
-        link = job.select_one(".jobTitle a")
-
-        job_title = title.text.strip()
-        job_company = company.text.strip() if company else "No especificada"
-        job_location = location.text.strip() if location else "No indicada"
-        job_link = "https://es.indeed.com" + link["href"] if link else ""
-
-        if any(k.lower() in job_title.lower() for k in KEYWORDS):
-            offers.append((job_title, job_company, job_location, job_link))
+        if any(k in title.lower() for k in KEYWORDS):
+            offers.append((title, company, location, link))
 
     return offers
 
 
 # --------------------------------------------------------
-# SCRAPER TECNOEMPLEO (2025)
-# --------------------------------------------------------
-def scrape_tecnoempleo():
-    url = "https://www.tecnoempleo.com/ofertas-trabajo-huelva"
-    r = requests.get(url, headers=HEADERS)
-    soup = BeautifulSoup(r.text, "html.parser")
-
-    offers = []
-    jobs = soup.select("article.box_offer")
-
-    for job in jobs:
-        title = job.select_one(".title_offer a")
-        company = job.select_one(".name")
-        location = job.select_one(".localidad")
-        link = job.select_one(".title_offer a")
-
-        if not title:
-            continue
-
-        job_title = title.text.strip()
-        job_company = company.text.strip() if company else "No especificada"
-        job_location = location.text.strip() if location else "No indicada"
-        job_link = "https://www.tecnoempleo.com" + link["href"] if link else ""
-
-        if any(k.lower() in job_title.lower() for k in KEYWORDS):
-            offers.append((job_title, job_company, job_location, job_link))
-
-    return offers
-
-
-# --------------------------------------------------------
-# SCRAPER LINKEDIN HTML (NO RSS)
+# SCRAPER: LINKEDIN (via SerpAPI)
 # --------------------------------------------------------
 def scrape_linkedin():
-    url = "https://www.linkedin.com/jobs/search/?keywords=developer%20it%20ciberseguridad&location=Huelva"
-    r = requests.get(url, headers=HEADERS)
-    soup = BeautifulSoup(r.text, "html.parser")
+    url = "https://serpapi.com/search"
+    params = {
+        "engine": "linkedin_jobs",
+        "keywords": "developer it ciberseguridad",
+        "location": "Huelva, Spain",
+        "api_key": SERPAPI_KEY
+    }
+
+    r = requests.get(url, params=params)
+    data = r.json()
 
     offers = []
-    jobs = soup.select("li")
+
+    jobs = data.get("jobs_results", [])
 
     for job in jobs:
-        title = job.select_one("h3")
-        link = job.select_one("a.base-card__full-link")
-        company = job.select_one("h4")
-        location = job.select_one(".job-search-card__location")
+        title = job.get("title", "").strip()
+        company = job.get("company", {}).get("name", "Desconocida")
+        location = job.get("location", "No indicada")
+        link = job.get("job_url", "")
 
-        if not title or not link:
-            continue
-
-        job_title = title.text.strip()
-        job_company = company.text.strip() if company else "No especificada"
-        job_location = location.text.strip() if location else "No indicada"
-        job_link = link.get("href")
-
-        if any(k.lower() in job_title.lower() for k in KEYWORDS):
-            offers.append((job_title, job_company, job_location, job_link))
+        if any(k in title.lower() for k in KEYWORDS):
+            offers.append((title, company, location, link))
 
     return offers
 
 
 # --------------------------------------------------------
-# HTML TABLE
+# CREAR TABLA HTML
 # --------------------------------------------------------
 def build_html_table(data):
     if not data:
         return "<p>No se encontraron ofertas esta semana.</p>"
 
     table = """
-    <h2>Ofertas de empleo actualizadas (IT / Desarrollo / Ciberseguridad)</h2>
+    <h2>Ofertas de empleo (IT / Desarrollo / Ciberseguridad)</h2>
     <table border='1' cellpadding='6' cellspacing='0' style='border-collapse: collapse;'>
         <tr style='background:#f0f0f0;'>
             <th>Puesto</th>
@@ -146,14 +112,13 @@ def build_html_table(data):
 
 
 # --------------------------------------------------------
-# SEND EMAIL
+# ENVIAR EMAIL
 # --------------------------------------------------------
 def send_email(html):
     msg = MIMEMultipart("alternative")
-    msg["Subject"] = "Ofertas de trabajo – Reporte semanal"
+    msg["Subject"] = "Ofertas de trabajo – Reporte Semanal"
     msg["From"] = SENDER
     msg["To"] = RECEIVER
-
     msg.attach(MIMEText(html, "html"))
 
     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
@@ -164,18 +129,18 @@ def send_email(html):
 
 
 # --------------------------------------------------------
-# MAIN
+# PRINCIPAL
 # --------------------------------------------------------
 def main():
-    indeed = scrape_indeed()
-    tecno = scrape_tecnoempleo()
+    print("Buscando ofertas...")
+
+    google_jobs = scrape_google_jobs()
     linkedin = scrape_linkedin()
 
-    print("Indeed:", len(indeed))
-    print("TecnoEmpleo:", len(tecno))
-    print("LinkedIn:", len(linkedin))
+    print(f"Google Jobs: {len(google_jobs)}")
+    print(f"LinkedIn Jobs: {len(linkedin)}")
 
-    all_jobs = indeed + tecno + linkedin
+    all_jobs = google_jobs + linkedin
     html = build_html_table(all_jobs)
 
     send_email(html)
